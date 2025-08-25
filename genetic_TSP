@@ -64,8 +64,9 @@ def genetic_algorithm(dist_matrix, pop_size=50, generations=200, mutation_rate=0
             best_route = current_best
             best_distance = current_distance
 
-        # Print progress each generation
-        print(f"Generation {gen+1}: Best Distance = {best_distance}")
+        # Print progress every 10 generations
+        if (gen + 1) % 10 == 0 or gen == generations - 1:
+            print(f"Generation {gen+1}: Best Distance = {best_distance}")
 
         # Generate new population
         new_population = []
@@ -77,7 +78,10 @@ def genetic_algorithm(dist_matrix, pop_size=50, generations=200, mutation_rate=0
             new_population.append(child)
         population = new_population
 
-    return best_route, best_distance
+    # Ensure final best route is returned as a full cycle (back to start)
+    best_route_cycle = [int(city) for city in best_route] + [int(best_route[0])]
+    return best_route_cycle, best_distance
+
 
 # ----- Example Run -----
 np.random.seed(51)
