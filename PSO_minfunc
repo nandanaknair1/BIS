@@ -1,0 +1,55 @@
+import numpy as np
+
+# Step 1: Define the problem (objective function)
+def objective_function(position):
+    x, y = position
+    return x**2 + y**2   # De Jong Sphere Function
+
+# Step 2: Initialize parameters
+num_particles = 30
+num_iterations = 50
+w = 0.5       # inertia weight
+c1 = 1.5      # cognitive coefficient
+c2 = 1.5      # social coefficient
+
+# Step 3: Initialize particles (positions & velocities)
+particles = np.random.uniform(-10, 10, (num_particles, 2))  # positions
+velocities = np.random.uniform(-1, 1, (num_particles, 2))   # velocities
+
+# Each particle remembers its best position (pbest)
+pbest_positions = np.copy(particles)
+pbest_scores = np.array([objective_function(p) for p in particles])
+
+# Global best (gbest)
+gbest_index = np.argmin(pbest_scores)
+gbest_position = pbest_positions[gbest_index]
+gbest_score = pbest_scores[gbest_index]
+
+# Step 6: Iterate
+for t in range(num_iterations):
+    for i in range(num_particles):
+        # Step 4: Evaluate fitness
+        score = objective_function(particles[i])
+        
+        # Update personal best
+        if score < pbest_scores[i]:
+            pbest_scores[i] = score
+            pbest_positions[i] = particles[i]
+    
+    # Update global best
+    gbest_index = np.argmin(pbest_scores)
+    if pbest_scores[gbest_index] < gbest_score:
+        gbest_score = pbest_scores[gbest_index]
+        gbest_position = pbest_positions[gbest_index]
+    
+    # Step 5: Update velocity and position
+    r1, r2 = np.random.rand(), np.random.rand()
+    for i in range(num_particles):
+        cognitive = c1 * r1 * (pbest_positions[i] - particles[i])
+        social = c2 * r2 * (gbest_position - particles[i])
+        velocities[i] = w * velocities[i] + cognitive + social
+        particles[i] += velocities[i]
+
+# Step 7: Output best solution
+print("Best position:", gbest_position)
+print("Best score:", gbest_score)
