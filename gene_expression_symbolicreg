@@ -1,0 +1,147 @@
+import random
+import math
+import numpy as np
+
+# === OPERATORS AND TERMINALS ===
+BINARY_FUNCS = ["+", "-", "*"]
+UNARY_FUNCS = ["sin", "cos", "tan"]
+TERMINALS = ["x", 1, 2, 3]
+
+MAX_DEPTH = 4
+
+# === TREE NODE ===
+class Node:
+    def __init__(self, value, left=None, right=None):
+        self.value = value
+        self.left = left
+        self.right = right
+
+    def is_leaf(self):
+        return self.left is None and self.right is None
+
+    def copy(self):
+        return Node(
+            self.value,
+            self.left.copy() if self.left else None,
+            self.right.copy() if self.right else None,
+        )
+
+    def to_str(self):
+        if self.is_leaf():
+            return str(self.value)
+        if self.value in BINARY_FUNCS:
+            return f"({self.left.to_str()} {self.value} {self.right.to_str()})"
+        elif self.value in UNARY_FUNCS:
+            return f"{self.value}({self.left.to_str()})"
+
+# === RANDOM TREE GENERATION ===
+def random_tree(depth=0):
+    if depth > MAX_DEPTH or (depth > 1 and random.random() < 0.3):
+        return Node(random.choice(TERMINALS))
+    if random.random() < 0.5:
+        op = random.choice(BINARY_FUNCS)
+        return Node(op, random_tree(depth+1), random_tree(depth+1))
+    else:
+        op = random.choice(UNARY_FUNCS)
+        return Node(op, random_tree(depth+1))
+
+# === EVALUATION ===
+def safe_eval(node, x):
+    try:
+        if node.is_leaf():
+            return x if node.value == "x" else node.value
+        if node.value == "+":
+            return safe_eval(node.left, x) + safe_eval(node.right, x)
+        if node.value == "-":
+            return safe_eval(node.left, x) - safe_eval(node.right, x)
+        if node.value == "*":
+            return safe_eval(node.left, x) * safe_eval(node.right, x)
+        if node.value == "sin":
+            return math.sin(safe_eval(node.left, x))
+        if node.value == "cos":
+            return math.cos(safe_eval(node.left, x))
+        if node.value == "tan":
+            val = safe_eval(node.left, x)
+            return math.tan(val) if abs(math.cos(val)) > 1e-6 else 1
+    except (OverflowError, ZeroDivisionError, ValueError):
+        return 1
+
+def fitness(tree, xs, ys_true):
+    ys_pred = [safe_eval(tree, x) for x in xs]
+    return np.mean((np.array(ys_true) - np.array(ys_pred))**2)
+
+# === SELECTION (TOURNAMENT) ===
+def tournament_selection(population, xs, ys, k=3):
+    return min(random.sample(population, k), key=lambda t: fitness(t, xs, ys))
+
+# === CROSSOVER (SUBTREE SWAP) ===
+def random_subtree(node):
+    if node.is_leaf() or random.random() < 0.3:
+        return node
+    if node.value in BINARY_FUNCS:
+        return random.choice([node, random_subtree(node.left), random_subtree(node.right)])
+    elif node.value in UNARY_FUNCS:
+        return random.choice([node, random_subtree(node.left)])
+    return node
+
+def crossover(t1, t2):
+    child1, child2 = t1.copy(), t2.copy()
+    subtree1 = random_subtree(child1)
+    subtree2 = random_subtree(child2)
+    # swap the nodes
+    subtree1.value, subtree1.left, subtree1.right, subtree2.value, subtree2.left, subtree2.right = (
+        subtree2.value, subtree2.left, subtree2.right,
+        subtree1.value, subtree1.left, subtree1.right
+    )
+    return child1, child2
+
+# === MUTATION (POINT CHANGE) ===
+def mutate(tree, prob=0.2, depth=0):
+    if random.random() < prob:
+        return random_tree(depth)
+    if tree.is_leaf():
+        return tree.copy()
+    new_tree = tree.copy()
+    new_tree.left = mutate(new_tree.left, prob, depth+1) if new_tree.left else None
+    new_tree.right = mutate(new_tree.right, prob, depth+1) if new_tree.right else None
+    return new_tree
+
+# === MAIN EVOLUTION ===
+def evolve(target_function, generations=50, pop_size=50):
+    # Training data
+    xs = np.linspace(-3, 3, 30)
+    ys_true = [target_function(x) for x in xs]
+
+    # Initialize population
+    population = [random_tree() for _ in range(pop_size)]
+
+    for gen in range(generations):
+        new_pop = []
+        while len(new_pop) < pop_size:
+            p1 = tournament_selection(population, xs, ys_true)
+            p2 = tournament_selection(population, xs, ys_true)
+
+            if random.random() < 0.7:
+                c1, c2 = crossover(p1, p2)
+            else:
+                c1, c2 = p1.copy(), p2.copy()
+
+            c1 = mutate(c1)
+            c2 = mutate(c2)
+
+            new_pop.extend([c1, c2])
+
+        population = new_pop[:pop_size]
+        best = min(population, key=lambda t: fitness(t, xs, ys_true))
+        print(f"Gen {gen:02d} | Fitness: {fitness(best, xs, ys_true):.4f} | Expr: {best.to_str()}")
+
+    return min(population, key=lambda t: fitness(t, xs, ys_true))
+
+# === RUN SYMBOLIC REGRESSION ===
+if __name__ == "__main__":
+    def target_function(x):
+        return x**2 + x + 1
+
+    best = evolve(target_function, generations=50, pop_size=80)
+    print("\n=== BEST RESULT ===")
+    print("Expression:", best.to_str())
