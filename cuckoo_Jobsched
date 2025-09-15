@@ -1,0 +1,80 @@
+import numpy as np
+import random
+
+# ---------------------------
+# 1. Define the Problem (Input from User)
+# ---------------------------
+n_people = 4
+n_jobs = 4
+
+print("Enter the job cost matrix (each row = person, each column = job):")
+cost_matrix = []
+for i in range(n_people):
+    row = list(map(int, input(f"Enter costs for Person {i+1} (space-separated for {n_jobs} jobs): ").split()))
+    cost_matrix.append(row)
+
+cost_matrix = np.array(cost_matrix)
+
+def fitness(solution):
+    """Calculate total cost for a given job assignment (solution)."""
+    return sum(cost_matrix[i][solution[i]] for i in range(len(solution)))
+
+# ---------------------------
+# 2. Initialize Parameters
+# ---------------------------
+n_nests = 10          # number of nests
+pa = 0.25             # probability of discovery
+max_iter = 100        # number of iterations
+
+# ---------------------------
+# 3. Initialize Population
+# ---------------------------
+def random_solution():
+    """Generate a random permutation of jobs."""
+    return np.random.permutation(n_jobs)
+
+nests = [random_solution() for _ in range(n_nests)]
+fitness_values = [fitness(s) for s in nests]
+
+# ---------------------------
+# 4. Generate New Solutions (via Lévy flights)
+# ---------------------------
+def get_new_solution(sol):
+    """Generate new solution by swapping two jobs."""
+    new_sol = sol.copy()
+    i, j = np.random.choice(len(sol), 2, replace=False)
+    new_sol[i], new_sol[j] = new_sol[j], new_sol[i]  # swap jobs
+    return new_sol
+
+# ---------------------------
+# 5–7. Main Loop
+# ---------------------------
+best_solution = None
+best_fitness = float("inf")
+
+for t in range(max_iter):
+    for i in range(n_nests):
+        new_sol = get_new_solution(nests[i])
+        new_fit = fitness(new_sol)
+        if new_fit < fitness_values[i]:
+            nests[i] = new_sol
+            fitness_values[i] = new_fit
+    
+    # Abandon worst nests with probability pa
+    num_abandon = int(pa * n_nests)
+    worst_idx = np.argsort(fitness_values)[-num_abandon:]
+    for idx in worst_idx:
+        nests[idx] = random_solution()
+        fitness_values[idx] = fitness(nests[idx])
+    
+    # Track best
+    min_fit = min(fitness_values)
+    if min_fit < best_fitness:
+        best_fitness = min_fit
+        best_solution = nests[np.argmin(fitness_values)]
+
+# ---------------------------
+# 8. Output
+# ---------------------------
+print("\nBest Job Assignment (job index for each person):", best_solution)
+print("Minimum Cost:", best_fitness)
