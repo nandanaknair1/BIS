@@ -1,0 +1,149 @@
+import numpy as np
+
+# ---------------------------
+# Step 1: Define the Problem
+# ---------------------------
+def supply_chain_cost(x, cost_matrix, supply, demand):
+    factories, warehouses = len(supply), len(demand)
+    shipment = x.reshape((factories, warehouses))
+
+    # Calculate supply/demand totals
+    supply_used = shipment.sum(axis=1)
+    demand_met = shipment.sum(axis=0)
+
+    # Transportation cost
+    cost = np.sum(shipment * cost_matrix)
+
+    # Penalty if constraints are violated
+    penalty = 0
+    for i in range(factories):
+        if supply_used[i] > supply[i]:
+            penalty += (supply_used[i] - supply[i]) * 1e5
+    for j in range(warehouses):
+        if demand_met[j] < demand[j]:
+            penalty += (demand[j] - demand_met[j]) * 1e5
+
+    return cost + penalty
+
+# ---------------------------
+# Step 2: Initialize Parameters
+# ---------------------------
+def gwo_supply_chain(factories, warehouses, supply, demand, cost_matrix,
+                     n_wolves=20, max_iter=100):
+    dim = factories * warehouses
+    lb, ub = 0, max(max(supply), max(demand))
+
+    # ---------------------------
+    # Step 3: Initialize Population
+    # ---------------------------
+    wolves = np.random.randint(lb, ub + 1, (n_wolves, dim))
+
+    # Initialize leaders
+    alpha, beta, delta = np.zeros(dim, dtype=int), np.zeros(dim, dtype=int), np.zeros(dim, dtype=int)
+    alpha_score, beta_score, delta_score = float("inf"), float("inf"), float("inf")
+
+    convergence_curve = []
+
+    # ---------------------------
+    # Step 6: Iterate until termination
+    # ---------------------------
+    for t in range(max_iter):
+        # ---------------------------
+        # Step 4: Evaluate Fitness
+        # ---------------------------
+        for i in range(n_wolves):
+            fitness = supply_chain_cost(wolves[i], cost_matrix, supply, demand)
+
+            # ---------------------------
+            # Step 6: Selection of leaders
+            # ---------------------------
+            if fitness < alpha_score:
+                alpha_score, alpha = fitness, wolves[i].copy()
+            elif fitness < beta_score:
+                beta_score, beta = fitness, wolves[i].copy()
+            elif fitness < delta_score:
+                delta_score, delta = fitness, wolves[i].copy()
+
+        a = 2 - t * (2 / max_iter)  # Decreasing from 2 to 0
+
+        # ---------------------------
+        # Step 5: Update Positions
+        # ---------------------------
+        for i in range(n_wolves):
+            for j in range(dim):
+                r1, r2 = np.random.rand(), np.random.rand()
+                A1, C1 = 2 * a * r1 - a, 2 * r2
+                D_alpha = abs(C1 * alpha[j] - wolves[i][j])
+                X1 = alpha[j] - A1 * D_alpha
+
+                r1, r2 = np.random.rand(), np.random.rand()
+                A2, C2 = 2 * a * r1 - a, 2 * r2
+                D_beta = abs(C2 * beta[j] - wolves[i][j])
+                X2 = beta[j] - A2 * D_beta
+
+                r1, r2 = np.random.rand(), np.random.rand()
+                A3, C3 = 2 * a * r1 - a, 2 * r2
+                D_delta = abs(C3 * delta[j] - wolves[i][j])
+                X3 = delta[j] - A3 * D_delta
+
+                # Integer rounding
+                wolves[i][j] = int(np.clip(round((X1 + X2 + X3) / 3), lb, ub))
+
+        convergence_curve.append(alpha_score)
+
+    # ---------------------------
+    # Step 7: Output Best Solution
+    # ---------------------------
+    best_plan = alpha.reshape(factories, warehouses)
+
+    # Balancing step for feasibility
+    supply_used = best_plan.sum(axis=1)
+    demand_met = best_plan.sum(axis=0)
+
+    for i in range(factories):
+        if supply_used[i] > supply[i]:
+            excess = supply_used[i] - supply[i]
+            for j in np.argsort(-cost_matrix[i]):
+                reduce = min(excess, best_plan[i][j])
+                best_plan[i][j] -= reduce
+                excess -= reduce
+                if excess == 0:
+                    break
+
+    for j in range(warehouses):
+        if demand_met[j] < demand[j]:
+            deficit = demand[j] - demand_met[j]
+            i = np.argmin(cost_matrix[:, j])
+            best_plan[i][j] += deficit
+
+    return best_plan, alpha_score, convergence_curve
+
+
+# ---------------------------
+# Main Execution
+# ---------------------------
+if __name__ == "__main__":
+    factories = int(input("Enter number of factories: "))
+    warehouses = int(input("Enter number of warehouses: "))
+
+    supply = [int(input(f"Enter supply for factory {i+1}: ")) for i in range(factories)]
+    demand = [int(input(f"Enter demand for warehouse {j+1}: ")) for j in range(warehouses)]
+
+    print("Enter cost matrix row by row (space-separated):")
+    cost_matrix = []
+    for i in range(factories):
+        row = list(map(int, input(f"Factory {i+1}: ").split()))
+        cost_matrix.append(row)
+    cost_matrix = np.array(cost_matrix)
+
+    n_wolves = int(input("Enter number of wolves: "))
+    max_iter = int(input("Enter maximum number of iterations: "))
+
+    best_plan, min_cost, convergence = gwo_supply_chain(
+        factories, warehouses, supply, demand, cost_matrix,
+        n_wolves, max_iter
+    )
+
+    print("\nBest Shipment Plan (integer units):")
+    print(best_plan)
+    print("\nMinimum Transportation Cost:", min_cost)
